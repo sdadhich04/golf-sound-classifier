@@ -16,7 +16,7 @@ The system listens for the ~500 ms window around a club-ball impact and classifi
 | **Ground** | Club hits turf before the ball |
 | **Top** | Club catches the top of the ball |
 
-Audio is captured by the onboard PDM microphone on an **Arduino Nano 33 BLE Sense**, preprocessed into Mel Filterbank Energy (MFE) features, and fed to a quantized dense neural network — all running on a microcontroller with 256 KB flash and 64 KB RAM.
+Audio is captured by the onboard PDM microphone on an **Arduino Nano 33 BLE Sense**, preprocessed into Mel Filterbank Energy (MFE) features, and fed to a quantized dense neural network — all running on a microcontroller with 1 MB flash and 256 KB RAM.
 
 ---
 
@@ -52,7 +52,7 @@ Ground → Good misclassification (13.3%) is the primary failure mode, likely du
 | **Peak RAM** | 11.8 KB | 3.3 KB | **11.8 KB** |
 | **Flash** | — | 75.9 KB | **75.9 KB** |
 
-> **Why int8 quantization is required, not optional:** the unoptimized float32 model uses 258 KB flash — exceeding the Nano's 256 KB limit. Int8 quantization shrinks the classifier to 75.9 KB and cuts RAM from 9.0 KB to 3.3 KB, with no measurable accuracy loss.
+> **Why int8 quantization is the practical choice:** the unoptimized float32 model uses 258 KB flash versus 75.9 KB for int8 — a 3.4x reduction — and cuts peak RAM from 9.0 KB to 3.3 KB, with no measurable accuracy loss. On a 1 MB-flash board either fits, but int8 leaves far more headroom for the rest of the firmware (BLE stack, other libraries) and runs faster on the Cortex-M4F's integer pipeline.
 
 ---
 
@@ -65,7 +65,7 @@ GolfSoundClassifier_EE446_FinalProjectReport.pdf   ← Written report
 Golf_TinyML_EE446.pptx             ← Final presentation slides
 project_proposal.pdf               ← Original project proposal
 deployment/                         ← Edge Impulse C++ library export (EON Compiler, int8 quantized)
-  golf-cpp-mcu-v2-impulse-3.zip     ← Arduino-ready deployment package for Nano 33 BLE Sense
+  golf-cpp-mcu-v2-impulse-3.zip     ← Edge Impulse C++/CMake SDK export (EON-compiled model + inference SDK — not a drop-in Arduino library; no .ino or library.properties included, meant for integration into a custom firmware build)
 dataset/                            ← Raw recording sessions (MP3, ~13 MB total)
   20260528_125335.mp3               ← Recording session 1 (May 28 2026)
   20260528_130155.mp3               ← Recording session 2
@@ -116,7 +116,7 @@ The notebook reproduces the full MFE feature extraction and int8 quantization pi
 
 ## Hardware
 
-- **Arduino Nano 33 BLE Sense** (Nordic nRF52840, 256 KB flash, 64 KB RAM, onboard PDM microphone)
+- **Arduino Nano 33 BLE Sense** (Nordic nRF52840, 1 MB flash, 256 KB RAM, onboard PDM microphone)
 - Edge Impulse project: [sdadhich / Golf](https://studio.edgeimpulse.com/public/1027938/live) (public — clone to retrain or deploy)
 - Offline companion notebook reproduces the full methodology in plain Python/TensorFlow
 
@@ -139,3 +139,9 @@ pip install numpy soundfile librosa matplotlib tensorflow scikit-learn
 ## Authors
 
 Sparsh Dadhich — University of Washington, ECE / Neuroscience
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). This covers the author's own code, notebooks, and documentation in this repo. The Edge Impulse SDK export in `deployment/` retains its own license (see `edge-impulse-sdk/LICENSE` inside the zip).
