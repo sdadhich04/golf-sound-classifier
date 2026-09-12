@@ -1,147 +1,79 @@
-# Golf Swing Sound Classifier — TinyML on Arduino Nano 33 BLE Sense
+# Golf Sound Classifier
 
-**EE 446: Tiny Machine Learning for Ultra Low-Power Edge Computing | University of Washington, Spring 2026**
+TinyML audio-classification project for EE 446 at the University of Washington. The project classifies golf impact sounds into three labels:
 
-Classifying golf swing outcomes in real time from a single contact-sound recording, running entirely on a microcontroller with no cloud dependency.
+- `Good`
+- `Ground`
+- `Top`
 
----
+The included report and slides describe deployment on an Arduino Nano 33 BLE Sense using Edge Impulse. The deployment export in this checkout is an Edge Impulse C++ library for project `Golf` (`project_id` 1027938) owned by `sdadhich`.
 
-## What it does
+## Approach
 
-The system listens for the ~500 ms window around a club-ball impact and classifies the shot into one of three categories:
+The offline notebook, `Golf_TinyML_Pipeline.ipynb`, implements a companion training and evaluation pipeline:
 
-| Class | Description |
-|-------|-------------|
-| **Good** | Clean center-face strike |
-| **Ground** | Club hits turf before the ball |
-| **Top** | Club catches the top of the ball |
+1. Load labeled WAV clips from a local `Golf dataset/` folder.
+2. Infer labels from filename prefixes: `good`, `grnd`, and all other names as `Top`.
+3. Downmix audio to mono and resample to 16 kHz.
+4. Split clips into train and test sets before augmentation.
+5. Apply training-only augmentation with small time shifts, light noise, and gain changes.
+6. Extract 40-band mel filterbank energy features from 500 ms windows.
+7. Train a small Keras 1D CNN and convert it to an int8 TensorFlow Lite model.
 
-Audio is captured by the onboard PDM microphone on an **Arduino Nano 33 BLE Sense**, preprocessed into Mel Filterbank Energy (MFE) features, and fed to a quantized dense neural network — all running on a microcontroller with 1 MB flash and 256 KB RAM.
+The Edge Impulse deployment archive contains an MFE DSP block, an int8 TensorFlow Lite Micro classifier, and three output categories: `Good`, `Ground`, and `Top`. Its generated metadata lists microphone input at 16 kHz, 8,000 raw samples per model window, 1,960 neural-network input features, and int8 input/output tensors.
 
----
+## Data
 
-## Results
+The checkout includes three MP3 recording-session files under `dataset/`:
 
-Three Edge Impulse impulses were developed and benchmarked:
+- `20260528_125335.mp3`
+- `20260528_130155.mp3`
+- `20260528_131029.mp3`
 
-| Model | Window | Val Accuracy | AUC | Notes |
-|-------|--------|-------------|-----|-------|
-| Baseline (#1) | 500 ms | 74.5% | — | Initial model |
-| Compressed (#2) | 250 ms | 54.8% | — | Smallest footprint |
-| **Final (#3)** | **500 ms** | **91.6%** | **0.98** | Deployed model |
+The labeled WAV clips used by the notebook are not included in this checkout. The saved notebook output shows 76 labeled WAV recordings when run with the expected local data folder: 28 `Good`, 24 `Ground`, and 24 `Top`. To rerun the notebook, provide the labeled WAV clips in a repo-root folder named `Golf dataset/`.
 
-The offline notebook evaluates the same approach on a strict held-out test set (original clips only, no augmentation leakage) and achieves **79.4% test accuracy** — a conservative lower bound compared to the Edge Impulse validation split. The unoptimized float32 model scores 78.72% on the same EI test set, confirming the offline notebook faithfully reproduces the approach.
+## Repository Contents
 
-Per-class performance (Final model, int8 quantized, validation set):
+- `Golf_TinyML_Pipeline.ipynb` - offline Python/TensorFlow companion pipeline.
+- `deployment/golf-cpp-mcu-v2-impulse-3.zip` - Edge Impulse C++ library export with the generated model and SDK files.
+- `dataset/*.mp3` - raw recording-session audio files.
+- `demo_live_inference.mp4` - demo video artifact.
+- `GolfSoundClassifier_EE446_FinalProjectReport.pdf` - final report.
+- `Golf_TinyML_EE446.pptx` - final presentation.
+- `project_proposal.pdf` - project proposal.
 
-| Class | Accuracy | F1 |
-|-------|----------|----|
-| Good | 96.2% | 0.92 |
-| Ground | 86.7% | 0.90 |
-| Top | 88.0% | 0.94 |
+## Hardware and Tools
 
-Ground → Good misclassification (13.3%) is the primary failure mode, likely due to acoustic similarity when the divot is small.
+- Arduino Nano 33 BLE Sense / Nano 33 BLE Sense Rev2, as described in the report and slides.
+- Edge Impulse Studio for the deployed impulse, MFE block, quantization, and C++ export.
+- TensorFlow/Keras, TensorFlow Lite, librosa, NumPy, soundfile, matplotlib, and scikit-learn in the offline notebook.
 
----
+## How to Run the Notebook
 
-## On-device performance (Arduino Nano 33 BLE Sense, EON Compiler)
-
-| | MFE extraction | Classifier | **Total** |
-|---|---|---|---|
-| **Latency** | 125 ms | 2 ms | **127 ms** |
-| **Peak RAM** | 11.8 KB | 3.3 KB | **11.8 KB** |
-| **Flash** | — | 75.9 KB | **75.9 KB** |
-
-> **Why int8 quantization is the practical choice:** the unoptimized float32 model uses 258 KB flash versus 75.9 KB for int8 — a 3.4x reduction — and cuts peak RAM from 9.0 KB to 3.3 KB, with no measurable accuracy loss. On a 1 MB-flash board either fits, but int8 leaves far more headroom for the rest of the firmware (BLE stack, other libraries) and runs faster on the Cortex-M4F's integer pipeline.
-
----
-
-## Repository contents
-
-```
-Golf_TinyML_Pipeline.ipynb          ← Full offline pipeline (data → features → train → quantize → evaluate)
-demo_live_inference.mp4             ← Live demo: classifier running on Arduino Nano 33 BLE Sense
-GolfSoundClassifier_EE446_FinalProjectReport.pdf   ← Written report
-Golf_TinyML_EE446.pptx             ← Final presentation slides
-project_proposal.pdf               ← Original project proposal
-deployment/                         ← Edge Impulse C++ library export (EON Compiler, int8 quantized)
-  golf-cpp-mcu-v2-impulse-3.zip     ← Edge Impulse C++/CMake SDK export (EON-compiled model + inference SDK — not a drop-in Arduino library; no .ino or library.properties included, meant for integration into a custom firmware build)
-dataset/                            ← Raw recording sessions (MP3, ~13 MB total)
-  20260528_125335.mp3               ← Recording session 1 (May 28 2026)
-  20260528_130155.mp3               ← Recording session 2
-  20260528_131029.mp3               ← Recording session 3
-```
-
----
-
-## Model architecture
-
-**Deployed model (Edge Impulse, Impulse #3)** — fully connected network on MFE features:
-
-```
-Input  (1,960 features — 40 MFE bins × 49 frames, 500 ms window)
-Dense  (32 neurons, ReLU)
-Dropout (0.25)
-Dense  (16 neurons, ReLU)
-Dropout (0.25)
-Output (3 classes, softmax)
-```
-
-Training: 100 cycles, learning rate 0.005, CPU processor, no learned optimizer.
-
-**Offline notebook model** — 1D CNN for methodology comparison:
-
-```
-Input  (50, 40)
-Conv1D (8 filters, kernel 3, ReLU) → MaxPool(2) → Dropout(0.25)
-Conv1D (16 filters, kernel 3, ReLU) → MaxPool(2) → Dropout(0.25)
-Flatten → Dense (3, softmax)
-```
-
-The notebook reproduces the full MFE feature extraction and int8 quantization pipeline in plain Python/TensorFlow, independent of Edge Impulse.
-
----
-
-## Pipeline overview (`Golf_TinyML_Pipeline.ipynb`)
-
-1. **Data loading** — WAV files labeled by filename prefix (`good`, `grnd`, `top`); downmixed to mono, resampled to 16 kHz to match the board's PDM mic
-2. **Stratified train/test split** — held-out test set contains only original (non-augmented) clips to avoid leakage
-3. **Augmentation** — time shift (±30 ms), additive noise (SNR 30–40 dB), small gain variation; no pitch shift or time-stretch (preserves transient character of short top-shots)
-4. **MFE features** — 40 Mel filterbank energies, 500 ms window, 10 ms hop; matches Edge Impulse's MFE processing block exactly
-5. **1D CNN** — two conv blocks (8 → 16 filters) with max-pooling and dropout, softmax output
-6. **Int8 quantization** — TFLite full-integer quantization with representative dataset calibration; input/output both int8 for maximum on-device efficiency
-7. **Per-clip inference** — single function that replicates the on-device inference loop: load WAV → extract MFE → quantize input → run interpreter → dequantize output → return class + confidence
-
----
-
-## Hardware
-
-- **Arduino Nano 33 BLE Sense** (Nordic nRF52840, 1 MB flash, 256 KB RAM, onboard PDM microphone)
-- Edge Impulse project: [sdadhich / Golf](https://studio.edgeimpulse.com/public/1027938/live) (public — clone to retrain or deploy)
-- Offline companion notebook reproduces the full methodology in plain Python/TensorFlow
-
----
-
-## Dataset
-
-The raw recording sessions (three ~5-minute MP3 files from May 28, 2026) are included in `dataset/`. These are the original bulk recordings captured during the data collection session.
-
-The individual labeled clips (short WAV files prefixed `good_`, `grnd_`, `top_`) were trimmed from these recordings and uploaded to Edge Impulse for data management and augmentation. They are not stored in this repo — to reproduce results with the offline notebook, export the labeled dataset from Edge Impulse and place the WAV files in a `Golf dataset/` folder at the repo root, or record and label your own swings following the same naming convention.
-
-**Dependencies:** `numpy`, `soundfile`, `librosa`, `matplotlib`, `tensorflow`, `scikit-learn`
+Install the notebook dependencies:
 
 ```bash
 pip install numpy soundfile librosa matplotlib tensorflow scikit-learn
 ```
 
----
+Place labeled WAV clips in:
 
-## Authors
+```text
+Golf dataset/
+```
 
-Sparsh Dadhich — University of Washington, ECE / Neuroscience
+Then open and run:
 
----
+```text
+Golf_TinyML_Pipeline.ipynb
+```
+
+The notebook writes an int8 TensorFlow Lite model named `golf_model_int8.tflite`.
+
+## Credits
+
+The project proposal lists the team as Mihir Sharma, Kenzie Kosatria, and Sparsh Dadhich. The final report credits Kenzie with the demo video, offline reproduction notebook, presentation slides, Edge Impulse support, augmentation/evaluation work, and lab report; Mihir with dataset recording, on-device deployment, live swings in the demo, and report review; and Sparsh with leading most Edge Impulse work, model training and quantization, in-class presentation, and report review.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). This covers the author's own code, notebooks, and documentation in this repo. The Edge Impulse SDK export in `deployment/` retains its own license (see `edge-impulse-sdk/LICENSE` inside the zip).
+MIT license. See `LICENSE`.
